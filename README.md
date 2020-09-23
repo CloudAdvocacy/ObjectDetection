@@ -36,7 +36,6 @@ In our case, we will [Blob Fuse][Fuse] approach.
 az group create -l northeurope -n head_detect
 az storage account create -l northeurope -n storage4data -g head_detect --sku Standard_LRS
 ```
-
 1. Create a VM for data preparation:
 ```bash
 az vm create 
@@ -48,7 +47,6 @@ az vm create
    --generate-ssh-keys
 ```
 For the simplicity, I use password access here, but you can also use SSH authentication.
-
 1. Install blob-fuse driver:
 ```bash
 wget https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
@@ -57,7 +55,6 @@ rm packages-microsoft-prod.deb
 sudo apt-get update
 sudo apt-get install blobfuse
 ```
-
 1. Specify the storage credentials in the config text file. We will store it into `~/.fuse`:
 ```bash
 mkdir ~/fuse
@@ -72,20 +69,15 @@ You can get storage account key from [Azure Portal][AzPortal], or using the foll
 ```bash
 az storage account keys list --account-name storage4data -g head_detect
 ```
-
-1. We will now create a script file called `fusemount` to mount data directory using fuse driver. You can also type the commands directly, but having a script is more convenient:
+1. We will now create a script file called `fusemount` to mount data directory using fuse driver. You can also type the commands directly, but having a script is more convenient.
+1. Fuse uses some local cache directory to store files. You can create a ramdisk for faster access (more details on this [here][Fuse]), or use any fast local disk, such as SSD. In our case, we will use `/mnt/cache` as the caching directory, and `/mnt/data` as mount point. We will add commands to create those directories in the beginning of mount script. In DSVM, `/mnt` directory is not preserved, so after machine restart you would have to re-create directories and do re-mount, and having just one script to do all that is helpful:
 ```bash
-touch ~/fuse/fusedriver
-```
-1. Fuse uses some local cache directory to store files. You can create a ramdisk for faster access (more details on this [here][Fuse]), or use any fast local disk, such as SSD. In our case, we will use `/mnt/cache` as the caching directory, and `/mnt/data` as mount point. We will add commands to create those directories in the beginning of mount script:
-```bash
-cat >> ~/fuse/fusedriver
+cat > ~/fuse/fusedriver
 #!/bin/bash
 sudo mkdir /mnt/data /mnt/cache
 sudo chown vmuser /mnt/data /mnt/cache
 EOF
 ```
-
 1. Now let's add the actual mounting command:
 ```bash
 cat >> ~/fuse/fusemount
@@ -93,8 +85,6 @@ sudo blobfuse /mnt/data --tmp-path=/mnt/cache --config-file=/home/vmuser/fuse/fu
 EOF
 chmod u+x ~/fuse/fusemount
 ```
-You may also want to include the commands to create directories within `/mnt` in this script as well. In DSVM, `/mnt` directory is not preserved, so after machine restart you would have to re-create directories and do re-mount, and having just one script to do all that is helpful.
-
 1. Now you should be able to mount the storage using `~/fuse/fusemount` command.
 
 ### Downloading and Extracting Dataset
@@ -173,7 +163,7 @@ python setup.py build_ext --inplace
 
 All the data should be already available under `/mnt/data`, so you can start training. It is recommended to use `screen` utility to make sure training process is not interrupted if the connection to VM is broken. To start training, use `train.py` script from within *Keras Retinanet* repository:
 ```bash
-python keras_retinanet/bin/train.py csv /mnt/data/HollywoodHeads/annotations.csv /mnt/data/HollywoodHeads/classes.csv
+python keras_retinanet/bin/train.py --gpu 0 csv /mnt/data/HollywoodHeads/annotations.csv /mnt/data/HollywoodHeads/classes.csv
 ```
 
 ### Related Projects
